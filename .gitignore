@@ -1,0 +1,7 @@
+.idea
+*.iml
+/client/node_modules/
+/server/node_modules/
+/server/.env
+/client/.env
+/server/src/config/config.env
