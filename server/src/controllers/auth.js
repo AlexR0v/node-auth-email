@@ -35,7 +35,7 @@ export const login = async (req, res, next) => {
     }
     const match = await bcrypt.compare(password, user.password)
     if (!match) {
-      return next(new ErrorResponse(`Password incorrect`))
+      return next(new ErrorResponse(`Password incorrect`, 400))
     }
     sendToken(user, 200, res)
   } catch (e) {
