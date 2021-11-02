@@ -1,6 +1,8 @@
 import bcrypt from 'bcryptjs'
+import crypto from 'crypto'
 import User from '../models/User.js'
 import ErrorResponse from '../utils/errorResponse.js'
+import { sendEmail } from '../utils/sendEmail.js'
 
 const sendToken = (user, statusCode, res) => {
   const token = user.getSignetToken()
@@ -41,12 +43,58 @@ export const login = async (req, res, next) => {
   }
 }
 
-export const forgotPassword = (req, res, next) => {
-  res.send('forgotPassword')
+export const forgotPassword = async (req, res, next) => {
+  const { email } = req.body
+  try {
+    const user = await User.findOne({ email }).select('+password')
+    if (!user) {
+      return next(new ErrorResponse(`User with email ${email} not register`, 404))
+    }
+
+    const resetToken = user.getResetPasswordToken()
+
+    await user.save()
+
+    const resetUrl = `${process.env.CLIENT_URL}/passwordreset/${resetToken}`
+    const message = `
+      <h1>You have request a password reset</h1>
+      <p>Please go to this link to reset your password:</p>
+      <a href='${resetUrl}' clicktracking='off'>${resetUrl}</a>
+    `
+    try {
+      await sendEmail({
+        to: user.email,
+        subject: 'Reset Password',
+        text: message,
+      })
+      res.status(200).json({ success: true, data: 'Email Sent' })
+    } catch (e) {
+      user.resetPasswordToken = undefined
+      user.resetPasswordExpire = undefined
+      await user.save()
+      return next(new ErrorResponse('Email not be sent', 500))
+    }
+  } catch (e) {
+    next(e)
+  }
 }
 
-export const resetPassword = (req, res, next) => {
-  res.send(req.params.resetToken)
+export const resetPassword = async (req, res, next) => {
+  const resetPasswordToken = crypto.createHash('sha256').update(req.params.resetToken).digest('hex')
+  try {
+    const user = await User.findOne({ resetPasswordToken, resetPasswordExpire: { $gt: Date.now() } })
+
+    if (!user) {
+      return next(new ErrorResponse('Invalid reset token', 400))
+    }
+    user.password = req.body.password
+    user.resetPasswordToken = undefined
+    user.resetPasswordExpire = undefined
+    await user.save()
+    res.status(201).json({ success: true, data: 'Password reset success' })
+  } catch (e) {
+    next(e)
+  }
 }
 
 export const getAllUsers = async (req, res, next) => {
